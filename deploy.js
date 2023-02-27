@@ -3,34 +3,50 @@ const fs = require('fs')
 require('dotenv').config()
 
 // Aplication Binary Interface and Binary file created by solc compiler -> command <compile> in packaje.json
-const abi = fs.readFileSync(
-	'./contracts/SimpleStorage_sol_SimpleStorage.abi',
-	'utf8'
-)
-const binary = fs.readFileSync(
-	'./contracts/SimpleStorage_sol_SimpleStorage.bin',
-	'utf8'
-)
-const encryptedJsonKey = fs.readFileSync('./keys/encryptedKey.json', 'utf-8')
+const abi = fs.readFileSync('./contracts/SimpleStorage_sol_SimpleStorage.abi', 'utf8')
+const binary = fs.readFileSync('./contracts/SimpleStorage_sol_SimpleStorage.bin', 'utf8')
+const encryptedJsonKey = fs.readFileSync('./keys/encryptedKey_TESTNET.json', 'utf-8')
 
 //blockchain RCP Provider and wallet - both provided by Ganace
 const provider = new ethers.providers.JsonRpcProvider(process.env.RPC_HOST)
-const wallet = new ethers.Wallet.fromEncryptedJsonSync(
-	encryptedJsonKey,
-	process.env.PRIVATE_KEY_PWD
-)
+const provider_TESTNET = new ethers.providers.JsonRpcProvider(process.env.RPC_TESTNET)
 
-async function compile() {
-	const connectedWallet = await wallet.connect(provider)
+async function compileFromPK() {
+	// create a new Wallet and connect it to a URL RPC Host
+	const wallet = new ethers.Wallet(process.env.PRIVATE_KEY_TESTNET, provider_TESTNET)
+
 	// create a new ContractFactory given an: ABI, Binary file, and address/wallet owner
-	const contractFactory = new ethers.ContractFactory(
-		abi,
-		binary,
-		connectedWallet
-	)
+	const contractFactory = new ethers.ContractFactory(abi, binary, wallet)
+	// deploy contract factory with deploy()
 	console.log('deploying. . .')
 	const contract = await contractFactory.deploy()
+	const receiptTx = await contract.deployTransaction.wait(1)
+	console.log('contract deployed:', receiptTx)
 
+	// <retrieve> is a only-read function in the contract
+	const favNumber = await contract.retrieve()
+	console.log(`Your favorite number is: ${favNumber.toString()}`)
+
+	// <store> is a write function in the contract
+	const txResponse = await contract.store('29')
+	const txReceipt = await txResponse.wait(1)
+
+	const newFavNumber = await contract.retrieve()
+	console.log(`Your updated favorite number is: ${newFavNumber.toString()}`)
+}
+
+async function compileFromEncrypted() {
+	// create a new instance of Wallet using -> ethers.Wallet.fromEncryptedJsonSync(json, password)
+	const wallet = new ethers.Wallet.fromEncryptedJsonSync(encryptedJsonKey, process.env.PRIVATE_KEY_PWD)
+	//conect the wallet to a provider -> wallet.connect(providerURL)
+	const connectedWallet = await wallet.connect(provider_TESTNET)
+
+	// create a new ContractFactory given an: ABI, Binary file, and address/wallet owner
+	const contractFactory = new ethers.ContractFactory(abi, binary, connectedWallet)
+
+	// deploy contract and wait 1 confirmation to get a receipt
+	console.log('deploying. . .')
+	const contract = await contractFactory.deploy()
 	const deploymentReceipt = await contract.deployTransaction.wait(1)
 	console.log(deploymentReceipt)
 
@@ -38,16 +54,26 @@ async function compile() {
 	const currentFavNumber = await contract.retrieve()
 	console.log(`Your favorite number is: ${currentFavNumber.toString()}`)
 
-	// <store> is a write function in the contract
+	// <store> is a write function in the contract - must be signed to pay gas
 	const txResponse = await contract.store('29')
 	const txReceipt = await txResponse.wait(1)
 	console.log('New number saved:', txReceipt)
 
-	// <retrieve> is a only-read function in the contract
 	const currentFavNumberNew = await contract.retrieve()
-	console.log(
-		`Your updated favorite number is: ${currentFavNumberNew.toString()}`
-	)
+	console.log(`Your updated favorite number is: ${currentFavNumberNew.toString()}`)
+}
+
+async function retrieve() {
+	// create a new instance of Wallet using -> ethers.Wallet.fromEncryptedJsonSync(json, password)
+	const wallet = new ethers.Wallet.fromEncryptedJsonSync(encryptedJsonKey, process.env.PRIVATE_KEY_PWD)
+	//conect the wallet to a provider -> wallet.connect(providerURL)
+	const connectedWallet = await wallet.connect(provider)
+
+	// create a new ContractFactory given an: ABI, Binary file, and address/wallet owner
+	const contractFactory = new ethers.ContractFactory(abi, binary, connectedWallet)
+
+	const favNumber = await contractFactory.retrieve()
+	console.log(`Your favorite number is: ${favNumber.toString()}`)
 }
 
 async function transactionDeploy() {
@@ -75,7 +101,7 @@ async function readNumber(){
     const currentFavNumber = await contract.retrieve()
 } */
 
-compile()
+compileFromEncrypted()
 	.then(() => process.exit(0))
 	.catch((error) => {
 		console.log(error)
